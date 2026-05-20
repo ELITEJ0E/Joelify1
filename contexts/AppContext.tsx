@@ -72,6 +72,17 @@ interface AppContextType extends AppState {
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
+const mergeTrackWithFallback = (track: Track, fallback?: Track) => {
+  if (!fallback) return track;
+  const isFallbackVideo = fallback.thumbnail?.includes('.mp4') || fallback.thumbnail?.includes('video_upload');
+  const isTrackVideo = track.thumbnail?.includes('.mp4') || track.thumbnail?.includes('video_upload');
+  return {
+    ...fallback,
+    ...track,
+    thumbnail: (!isTrackVideo && isFallbackVideo) ? fallback.thumbnail : (track.thumbnail || fallback.thumbnail)
+  };
+};
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null)
   const [currentPlaylistId, setCurrentPlaylistId] = useState<string | null>(null)
@@ -101,7 +112,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null)
   const [currentBPM, setCurrentBPM] = useState<number>(0)
   const [beatPulse, setBeatPulse] = useState<number>(0)
-  const [joelsSongs, setJoelsSongs] = useState<Track[]>(FALLBACK_JOELS_SONGS)
+  const [joelsSongs, setJoelsSongs] = useState<Track[]>([...FALLBACK_JOELS_SONGS].reverse())
   const [user, setUser] = useState<User | null>(null)
 
   // Listen for Firebase Auth state changes
@@ -137,7 +148,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         stored = loadState()
       }
 
-      if (stored.currentTrack) setCurrentTrack(stored.currentTrack)
+      if (stored.currentTrack) {
+        const fallback = FALLBACK_JOELS_SONGS.find(f => f.id === stored.currentTrack?.id);
+        setCurrentTrack(mergeTrackWithFallback(stored.currentTrack, fallback));
+      }
       if (stored.currentPlaylistId) setCurrentPlaylistId(stored.currentPlaylistId)
       if (stored.playlists && stored.playlists.length > 0) {
         setPlaylists(stored.playlists)
@@ -163,7 +177,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // Ensure all fallback songs are present and updated with latest hardcoded thumbnail data
           parsed = parsed.map(pTrack => {
             const fallback = FALLBACK_JOELS_SONGS.find(f => f.id === pTrack.id);
-            return fallback ? { ...pTrack, ...fallback } : pTrack;
+            return mergeTrackWithFallback(pTrack, fallback);
           });
 
           const missingFallbacks = FALLBACK_JOELS_SONGS.filter(
@@ -483,6 +497,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAudioSettingsState(settings)
   }
 
+  const handleSetCurrentTrack = (track: Track | null) => {
+    if (track) {
+      const fallback = FALLBACK_JOELS_SONGS.find(f => f.id === track.id)
+      setCurrentTrack(mergeTrackWithFallback(track, fallback))
+    } else {
+      setCurrentTrack(null)
+    }
+  }
+
   return (
     <AppContext.Provider
       value={{
@@ -497,7 +520,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         repeat,
         theme,
         videoMode,
-        setCurrentTrack,
+        setCurrentTrack: handleSetCurrentTrack,
         setCurrentPlaylistId,
         setPlaylists,
         addPlaylist,

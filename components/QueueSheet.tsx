@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { useApp } from "@/contexts/AppContext"
 import { GripVertical, X } from "lucide-react"
-import Image from "next/image"
+import { TrackImage as Image } from "./TrackImage"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 

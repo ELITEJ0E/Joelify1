@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useApp } from "@/contexts/AppContext"
 import { Play, MoreVertical, Trash2, GripVertical, Plus, Edit } from "lucide-react"
-import Image from "next/image"
+import { TrackImage as Image } from "./TrackImage"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {

@@ -6,7 +6,7 @@ import {
   Volume2, VolumeX, List, Youtube, Music2, Video, Music,
   Type, Minimize2, Maximize2, Mic,
 } from "lucide-react"
-import Image from "next/image"
+import { TrackImage as Image } from "./TrackImage"
 import { useApp } from "@/contexts/AppContext"
 import { YouTubePlayer } from "./YouTubePlayer"
 import { QueueSheet } from "./QueueSheet"
@@ -16,7 +16,7 @@ import { SleepTimer } from "./SleepTimer"
 import { ExpandablePlayer } from "./ExpandablePlayer"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { LIKED_SONGS_PLAYLIST_ID } from "./LikedSongsView"
 
@@ -636,6 +636,8 @@ export function PlayerControls() {
         case "s": e.preventDefault(); toggleShuffle(); break
         case "r": e.preventDefault(); toggleRepeat(); break
         case "v": e.preventDefault(); setBarVideoMode((v) => !v); break
+        case "l": e.preventDefault(); setLyricsOpen(!isLyricsOpen); break
+        case "q": e.preventDefault(); setQueueOpen(!isQueueOpen); break
       }
     }
     
@@ -644,7 +646,7 @@ export function PlayerControls() {
         window.removeEventListener("keydown", handleKeyDown)
     }
   }, [handlePlayPause, handleSeekForward, handleSeekBackward, handleNext, handlePrevious,
-    volume, handleVolumeChange, toggleMute, toggleShuffle, toggleRepeat, playbackSource])
+    volume, handleVolumeChange, toggleMute, toggleShuffle, toggleRepeat, playbackSource, isLyricsOpen, isQueueOpen])
 
   const handleSleepTimerEnd = useCallback(() => {
     if (playbackSource === "youtube" && youtubePlayer) youtubePlayer.pauseVideo()
@@ -800,7 +802,10 @@ export function PlayerControls() {
                   </Button>
                 </SheetTrigger>
                 <SheetContent className="w-full sm:w-96 bg-black/80 backdrop-blur-2xl border-white/[0.07]">
-                  <SheetHeader><SheetTitle>Lyrics</SheetTitle></SheetHeader>
+                  <SheetHeader>
+                    <SheetTitle>Lyrics</SheetTitle>
+                    <SheetDescription className="sr-only">Displaying lyrics for the currently playing track</SheetDescription>
+                  </SheetHeader>
                   <div className="mt-6 h-[calc(100vh-8rem)]">
                     <LyricsDisplay currentTime={currentTime} duration={duration} isPlaying={isPlaying} />
                   </div>
