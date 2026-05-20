@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Music2, RefreshCcw, RefreshCcwDot, ArrowDown } from "lucide-react"
+import { useState, useEffect, useRef, useMemo } from "react"
+import { Music2, RefreshCcw, RefreshCcwDot } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useApp } from "@/contexts/AppContext"
 import { useLyrics, parseLrc } from "@/hooks/useLyrics"
 
@@ -17,11 +18,19 @@ export function LyricsDisplay({ currentTime, isPlaying, duration }: LyricsDispla
   const { currentTrack } = useApp()
   const { lyrics: fetchedLyrics, isLoading, error } = useLyrics(currentTrack?.title, currentTrack?.artist, currentTrack?.id)
   
-  const activeLyrics = fetchedLyrics && fetchedLyrics.length > 0 
-    ? fetchedLyrics 
-    : currentTrack?.lyrics 
-      ? parseLrc(currentTrack.lyrics)
-      : null;
+  const activeLyrics = useMemo(() => {
+    let lyrics = fetchedLyrics && fetchedLyrics.length > 0 
+      ? fetchedLyrics 
+      : currentTrack?.lyrics 
+        ? parseLrc(currentTrack.lyrics)
+        : [];
+
+    const hasValidText = lyrics.some(line => line.text && line.text.trim() !== "");
+    if (!hasValidText) {
+      return [];
+    }
+    return lyrics;
+  }, [fetchedLyrics, currentTrack?.lyrics]);
 
   const [currentLineIndex, setCurrentLineIndex] = useState(0)
   const [isAutoScroll, setIsAutoScroll] = useState(true)
@@ -29,37 +38,48 @@ export function LyricsDisplay({ currentTime, isPlaying, duration }: LyricsDispla
   const lineRefs = useRef<(HTMLDivElement | null)[]>([])
   const isProgrammaticScroll = useRef(false)
 
+  const isUnsynced = useMemo(() => {
+    return activeLyrics.length > 0 && !activeLyrics.some(
+      (line) => typeof line.time === 'number' && !isNaN(line.time) && line.time >= 0 && line.text.trim() !== ""
+    );
+  }, [activeLyrics]);
+
   useEffect(() => {
     if (!activeLyrics || activeLyrics.length === 0) return
     if (!isAutoScroll) return // Do not sync with audio if auto-scroll is off
 
-    const isUnsynced = !activeLyrics.some((line) => line.time !== -1 && line.text !== "");
+    // Unsynced Fallback: Interpolate based on current time and track duration
     if (isUnsynced) {
       if (duration && duration > 0) {
         let pct = currentTime / duration;
         if (pct < 0) pct = 0;
         if (pct > 1) pct = 1;
         const newIndex = Math.floor(pct * activeLyrics.length);
-        if (newIndex !== currentLineIndex && newIndex < activeLyrics.length) {
-          setCurrentLineIndex(newIndex);
+        const clampedIndex = isNaN(newIndex) ? 0 : Math.min(Math.max(0, newIndex), activeLyrics.length - 1);
+        if (clampedIndex !== currentLineIndex) {
+          setCurrentLineIndex(clampedIndex);
         }
+      } else if (currentLineIndex !== 0) {
+        setCurrentLineIndex(0);
       }
       return;
     }
 
-    // For synced lyrics, we need to handle lines that might not have timestamps (time === -1)
-    // We do this by finding the last valid line whose time is <= currentTime
+    // Synced Lyrics: find the last valid line whose time is <= currentTime
     let newIndex = -1;
     for (let i = 0; i < activeLyrics.length; i++) {
-        if (activeLyrics[i].time !== -1 && currentTime >= activeLyrics[i].time) {
+        const t = activeLyrics[i].time;
+        if (typeof t === 'number' && !isNaN(t) && t >= 0 && currentTime >= t) {
             newIndex = i;
         }
     }
 
-    if (newIndex !== -1 && newIndex !== currentLineIndex) {
-      setCurrentLineIndex(newIndex)
+    if (newIndex >= 0 && newIndex < activeLyrics.length && newIndex !== currentLineIndex) {
+      setCurrentLineIndex(newIndex);
+    } else if (newIndex === -1 && currentLineIndex !== 0) {
+      setCurrentLineIndex(0);
     }
-  }, [currentTime, duration, activeLyrics, currentLineIndex, isAutoScroll])
+  }, [currentTime, duration, activeLyrics, currentLineIndex, isAutoScroll, isUnsynced])
 
   useEffect(() => {
     if (isAutoScroll) return;
@@ -92,9 +112,11 @@ export function LyricsDisplay({ currentTime, isPlaying, duration }: LyricsDispla
     if (!isAutoScroll) return;
     if (lineRefs.current[currentLineIndex] && scrollRef.current) {
       isProgrammaticScroll.current = true;
-      lineRefs.current[currentLineIndex]?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
+      requestAnimationFrame(() => {
+        lineRefs.current[currentLineIndex]?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       });
       setTimeout(() => {
         isProgrammaticScroll.current = false;
@@ -112,26 +134,35 @@ export function LyricsDisplay({ currentTime, isPlaying, duration }: LyricsDispla
     )
   }
 
-  if (isLoading && !activeLyrics) {
+  if (isLoading && activeLyrics.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4" />
-        <p className="text-sm">Loading lyrics...</p>
+      <div className="flex flex-col items-center h-full w-full p-8 overflow-hidden bg-background">
+        <div className="w-full max-w-2xl mx-auto space-y-8 pt-32 opacity-70">
+          <div className="space-y-4">
+            <Skeleton className="h-6 w-3/4 max-w-[300px] rounded-full mx-auto" />
+            <Skeleton className="h-6 w-full max-w-[400px] rounded-full mx-auto" />
+            <Skeleton className="h-6 w-5/6 max-w-[350px] rounded-full mx-auto" />
+          </div>
+          <div className="space-y-4 pt-4">
+            <Skeleton className="h-6 w-4/5 max-w-[380px] rounded-full mx-auto" />
+            <Skeleton className="h-6 w-full max-w-[420px] rounded-full mx-auto" />
+            <Skeleton className="h-6 w-2/3 max-w-[280px] rounded-full mx-auto" />
+          </div>
+        </div>
       </div>
     )
   }
 
-  if (!activeLyrics || activeLyrics.length === 0) {
+  if (activeLyrics.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8">
         <Music2 size={48} className="mb-4 opacity-50" />
-        <p className="text-sm">{error || "No lyrics available"}</p>
-        <p className="text-xs mt-1">for {currentTrack.title}</p>
+        <p className="text-sm">No lyrics available</p>
+        <p className="text-xs mt-1 text-center">We couldn't find lyrics for {currentTrack.title}</p>
+        {error && <p className="text-xs mt-4 opacity-50 text-center max-w-sm">{error}</p>}
       </div>
     )
   }
-
-  const isUnsynced = !activeLyrics.some((line) => line.time !== -1 && line.text !== "");
 
   return (
     <div className="flex flex-col h-full w-full relative overflow-hidden bg-background">
@@ -154,9 +185,11 @@ export function LyricsDisplay({ currentTime, isPlaying, duration }: LyricsDispla
           className="space-y-4 pb-32 text-center pt-16"
         >
           {activeLyrics.map((line, index) => {
-            const textTrimmed = line.text.trim();
+            // Strip out RSC wire artifacts just in case, but avoid targeting valid hex/characters
+            const safeText = (line.text || "").replace(/\$5[a-fA-F0-9]{1,2}/gi, "");
+            const textTrimmed = safeText.trim();
             const isSectionHeader = (textTrimmed.startsWith('[') && textTrimmed.endsWith(']')) || 
-                                    /^(主歌|副歌|桥段|最终副歌|intro|outro|verse|chorus|bridge)/i.test(textTrimmed);
+                                    /^(主歌|副歌|桥段|最终副歌|intro|outro|verse|chorus|bridge|pre-chorus|break|final chorus)/i.test(textTrimmed);
             
             let baseStyles = "";
             let textStyles = "";
@@ -167,7 +200,7 @@ export function LyricsDisplay({ currentTime, isPlaying, duration }: LyricsDispla
                     textStyles = index <= currentLineIndex ? "text-primary font-bold text-xl" : "text-primary font-bold text-xl opacity-60";
                  } else {
                     textStyles = index === currentLineIndex 
-                        ? "text-foreground text-xl font-bold" 
+                        ? "text-foreground text-2xl font-bold scale-105" 
                         : index < currentLineIndex 
                             ? "text-muted-foreground text-lg opacity-60" 
                             : "text-muted-foreground text-lg opacity-40";
@@ -192,19 +225,18 @@ export function LyricsDisplay({ currentTime, isPlaying, duration }: LyricsDispla
 
             return (
               <div
-                key={index}
+                key={`lyric-${index}`}
                 ref={(el) => { lineRefs.current[index] = el }}
                 className={`transition-all duration-300 transform origin-center ${baseStyles} ${textStyles} ${!textTrimmed ? 'min-h-[2rem]' : ''}`}
               >
-                {line.text}
+                {safeText || " "}
               </div>
             )
           })}
         </div>
       </ScrollArea>
-      {isLoading && (
-        <div className="absolute top-4 left-4 z-20 animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-      )}
+      {/* Subtle background refresh state if needed, removed spinner */}
     </div>
   )
 }
+

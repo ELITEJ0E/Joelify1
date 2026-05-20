@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState } from "react"
 import { Search, Play, Plus, ExternalLink, Loader2, Heart, Compass } from 'lucide-react'
-import Image from "next/image"
+import { TrackImage as Image } from "./TrackImage"
 import type { YouTubeVideo } from "@/lib/youtube"
 import { useApp } from "@/contexts/AppContext"
 import { Button } from "@/components/ui/button"

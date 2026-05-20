@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useApp } from "@/contexts/AppContext"
 import { Play, Plus, Clock } from "lucide-react"
-import Image from "next/image"
+import { TrackImage as Image } from "./TrackImage"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"

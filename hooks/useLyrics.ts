@@ -89,47 +89,78 @@ export function useLyrics(trackName?: string, artistName?: string, trackId?: str
   return { lyrics, isLoading, error };
 }
 
+export function sanitizeLyric(text: string): string {
+  if (typeof text !== 'string') return '';
+  
+  // 1. Normalize Unicode (e.g. combine accented characters)
+  let clean = text.normalize("NFC");
+
+  // 2. Remove invisible/invalid characters: BOM, null bytes, and replacement chars
+  clean = clean.replace(/[\u0000\uFEFF\uFFFD]/g, '');
+  
+  // 3. Prevent legacy artifacts ($5c, $5d, $5e) from previous double-encoding issues
+  clean = clean.replace(/\$5c/gi, '').replace(/\$5d/gi, '').replace(/\$5e/gi, '');
+  
+  // 4. Trim whitespace safely
+  return clean.trim();
+}
+
 export function parseLrc(lrc: string): LyricLine[] {
-  const lines = lrc.split(/\r?\n/);
+  if (!lrc || typeof lrc !== 'string') return [];
+  
+  // Normalize line breaks safely
+  const normalized = lrc.replace(/\r\n|\r/g, '\n');
+  const lines = normalized.split('\n');
   const parsed: LyricLine[] = [];
   
-  // Super permissive regex to find any timestamp anywhere in the line
-  const regex = /\[\s*(\d{1,3})\s*[:：]\s*(\d{1,2})(?:[.,](\d{1,3}))?\s*\](.*)/;
+  // Robust regex: ^\[\s*(\d{2,}):(\d{2})(?:\.(\d{1,3}))?\s*\](.*)$
+  const timeRegex = /^\[\s*(\d{2,}):(\d{2})(?:\.(\d{1,3}))?\s*\](.*)$/;
 
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) {
-      parsed.push({ time: -1, text: '' });
-      continue;
-    }
+  for (let i = 0; i < lines.length; i++) {
+    try {
+      const line = lines[i];
+      const sanitizedLine = sanitizeLyric(line);
 
-    const match = trimmedLine.match(regex);
-    if (match) {
-      // Remove the full matched timestamp string from the text, returning just the rest
-      const minutes = parseInt(match[1], 10);
-      const seconds = parseInt(match[2], 10);
-      const millisStr = match[3];
-      const millis = millisStr ? parseFloat('0.' + millisStr) : 0;
-      const text = match[4].trim();
-      
-      parsed.push({
-        time: minutes * 60 + seconds + millis,
-        text: text,
-      });
-    } else {
-      parsed.push({
-        time: -1,
-        text: trimmedLine,
-      });
+      // Preserve empty lines to maintain vertical structure
+      if (!sanitizedLine) {
+        parsed.push({ time: -1, text: '' });
+        continue;
+      }
+
+      const match = sanitizedLine.match(timeRegex);
+
+      if (match) {
+        const minutes = parseInt(match[1], 10);
+        const seconds = parseInt(match[2], 10);
+        const fractionStr = match[3] || '00';
+        
+        let centiseconds = parseInt(fractionStr, 10);
+        let fraction = 0;
+        if (fractionStr.length === 2) {
+           fraction = centiseconds / 100;
+        } else if (fractionStr.length === 3) {
+           fraction = centiseconds / 1000;
+        }
+
+        const exactTime = minutes * 60 + seconds + fraction;
+        const textContent = sanitizeLyric(match[4]);
+
+        parsed.push({
+          time: isNaN(exactTime) ? -1 : exactTime,
+          text: textContent
+        });
+      } else {
+        // Unsynchronized line (e.g. untimestamped section headers)
+        parsed.push({
+          time: -1,
+          text: sanitizedLine
+        });
+      }
+    } catch (e) {
+      // Prevent crash propagation: One bad lyric line must NOT break the entire file
+      console.warn("Failed to parse lyric line", e);
     }
   }
 
-  // To determine if entirely unsynced, check if ALL non-empty lines have time -1
-  const hasSyncedLine = parsed.some(line => line.time !== -1 && line.text !== '');
-  if (!hasSyncedLine) {
-     return lines.map(l => ({ time: -1, text: l.trim() }));
-  }
-
-  // Sort lyrics by time, leaving time=-1 lines at the beginning or assigning them sensible times
   return parsed;
 }

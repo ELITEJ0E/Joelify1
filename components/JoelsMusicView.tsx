@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Check, Trash2, PlusSquare, Music2, Link, GripVertical, Play, Heart } from "lucide-react";
 import { CustomToast } from "./CustomToast";
 import { Input } from "@/components/ui/input";
-import Image from "next/image";
+import { TrackImage as Image } from "./TrackImage";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -85,12 +85,11 @@ function SortableTrackItem({
         <div className="relative aspect-square w-12 flex-shrink-0 cursor-pointer overflow-hidden border border-white/5" onClick={() => playSunoTrack(track.id, track.title, track.artist, track.thumbnail, track.lyrics)}>
           {track.thumbnail ? (
             <Image 
-              src={track.thumbnail.includes('?') ? `${track.thumbnail}&v=${Date.now()}` : `${track.thumbnail}?v=${Date.now()}`} 
+              src={track.thumbnail} 
               alt={track.title} 
               fill
               className="object-cover" 
               referrerPolicy="no-referrer" 
-              unoptimized={true}
             />
           ) : (
             <div className="w-full h-full bg-primary/10 flex items-center justify-center border border-primary/20">
@@ -169,13 +168,20 @@ export function JoelsMusicView() {
     setSyncError(false);
     try {
       const res = await fetch(`/api/suno-playlist?id=${id}&_t=${Date.now()}`);
-      const data = await res.json();
+      
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Invalid JSON response from server: ${res.status} - ${text.substring(0, 50)}`);
+      }
       
       if (data.isRestricted) {
         // Silent fallback - users just see existing or fallback songs
         console.warn("Suno API is restricted:", data.error);
-        if (joelsSongs.length === 0 || joelsSongs === FALLBACK_SONGS) {
-             setJoelsSongs(FALLBACK_SONGS);
+        if (joelsSongs.length === 0) {
+             setJoelsSongs([...FALLBACK_SONGS].reverse());
         } else {
              // Still need to update any old fallback entries with the fresh FALLBACK_SONGS
              setJoelsSongs(prev => {
@@ -184,7 +190,7 @@ export function JoelsMusicView() {
                     return fallback ? { ...p, ...fallback } : p;
                 });
                 const missing = FALLBACK_SONGS.filter(f => !updated.some(u => u.id === f.id));
-                return [...missing, ...updated];
+                return [...[...missing].reverse(), ...updated];
              });
         }
         return;
@@ -204,13 +210,10 @@ export function JoelsMusicView() {
         
         // Merge with existing songs, prioritizing new data for matches, but keeping everything else (like fallbacks)
         setJoelsSongs(prev => {
-          const newSongs = [...prev];
-          tracksWithBuster.forEach((newTrack: any) => {
-            const index = newSongs.findIndex(s => s.id === newTrack.id);
-            if (index >= 0) {
-              newSongs[index] = newTrack;
-            } else {
-              newSongs.push(newTrack);
+          const newSongs = [...tracksWithBuster];
+          prev.forEach(oldTrack => {
+            if (!newSongs.some((t: any) => t.id === oldTrack.id)) {
+              newSongs.push(oldTrack);
             }
           });
           return newSongs;
@@ -260,7 +263,13 @@ export function JoelsMusicView() {
       let song;
       try {
         const res = await fetch(`/api/suno-metadata?ids=${id}&_t=${Date.now()}`);
-        const data = await res.json();
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          throw new Error(`Invalid JSON response: ${res.status}`);
+        }
         
         if (data.clips && Array.isArray(data.clips) && data.clips.length > 0) {
           const clip = data.clips[0];
@@ -270,7 +279,7 @@ export function JoelsMusicView() {
             id: clip.id,
             title: clip.title || "New Song",
             artist: clip.display_name || "Joel",
-            thumbnail: img.includes('?') ? `${img}&_t=${timestamp}` : `${img}?_t=${timestamp}`,
+            thumbnail: img,
             lyrics: clip.metadata?.prompt || ""
           };
         } else if (data.isRestricted || !res.ok) {
@@ -334,31 +343,73 @@ export function JoelsMusicView() {
 
   const updateMetadataOnly = async () => {
     try {
-      const ids = joelsSongs.map(s => s.id).join(",");
-      const res = await fetch(`/api/suno-metadata?ids=${ids}`);
-      const data = await res.json();
-      
-      if (data.isRestricted || !res.ok) return;
-      
-      if (data.clips && Array.isArray(data.clips)) {
-        const timestamp = Date.now();
-        const updatedSongs = joelsSongs.map(song => {
-          const fresh = data.clips.find((c: any) => c.id === song.id);
-          if (fresh) {
-            const latestImg = fresh.custom_image_url || fresh.image_url || fresh.cover_url || fresh.artwork_url || song.thumbnail;
-            const buster = latestImg.includes("?") ? `&_t=${timestamp}` : `?_t=${timestamp}`;
-            return {
-              ...song,
-              title: fresh.title || song.title,
-              artist: fresh.display_name || song.artist,
-              thumbnail: latestImg + buster,
-              lyrics: fresh.metadata?.prompt || song.lyrics || ""
-            };
-          }
-          return song;
-        });
-        setJoelsSongs(updatedSongs);
+      const allIds = joelsSongs.map(s => s.id);
+      if (allIds.length === 0) return;
+
+      // Ensure we don't exceed URL length limits (around 2048 chars for safety)
+      const maxIdsPerRequest = 20; 
+      let allClips: any[] = [];
+      let isRestricted = false;
+
+      for (let i = 0; i < allIds.length; i += maxIdsPerRequest) {
+        const chunkIds = allIds.slice(i, i + maxIdsPerRequest).join(",");
+        const res = await fetch(`/api/suno-metadata?ids=${chunkIds}`);
+        
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          console.error(`Invalid JSON response: ${res.status} - ${text.substring(0, 50)}`);
+          continue; // Skip this chunk if it fails to parse
+        }
+        
+        if (data.isRestricted || !res.ok) {
+           isRestricted = true;
+           break;
+        }
+
+        if (data.clips && Array.isArray(data.clips)) {
+           allClips.push(...data.clips);
+        }
       }
+      
+      if (isRestricted || allClips.length === 0) return;
+      
+      const timestamp = Date.now();
+      const updatedSongs = joelsSongs.map(song => {
+        const fresh = allClips.find((c: any) => c.id === song.id);
+        if (fresh) {
+          const fallbackTrack = FALLBACK_SONGS.find(f => f.id === song.id);
+          let sunoProvidedMp4 = null;
+          if (fresh.video_cover_url?.includes('.mp4') || fresh.video_cover_url?.includes('video_upload')) {
+            sunoProvidedMp4 = fresh.video_cover_url;
+          } else if (fresh.video_url?.includes('video_upload')) {
+            sunoProvidedMp4 = fresh.video_url;
+          }
+
+          let latestImg = sunoProvidedMp4 || fresh.custom_image_url || fresh.image_url || fresh.cover_url || fresh.artwork_url || song.thumbnail;
+          
+          if (!sunoProvidedMp4) {
+            if (fallbackTrack?.thumbnail?.includes('.mp4') || fallbackTrack?.thumbnail?.includes('video_upload')) {
+              latestImg = fallbackTrack.thumbnail;
+            } else if (song.thumbnail?.includes('.mp4') || song.thumbnail?.includes('video_upload')) {
+              latestImg = song.thumbnail;
+            }
+          }
+          
+          const buster = latestImg.includes("?") ? `&_t=${timestamp}` : `?_t=${timestamp}`;
+          return {
+            ...song,
+            title: fresh.title || song.title,
+            artist: fresh.display_name || song.artist,
+            thumbnail: latestImg.includes('.mp4') ? latestImg : latestImg + buster,
+            lyrics: fresh.metadata?.prompt || song.lyrics || ""
+          };
+        }
+        return song;
+      });
+      setJoelsSongs(updatedSongs);
     } catch (error) {
       console.error("Metadata update error", error);
     }
@@ -442,7 +493,7 @@ export function JoelsMusicView() {
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-primary/20 shadow-xl shadow-primary/10">
               <Image 
-                src={`https://cdn2.suno.ai/24c69462-2727-415e-8f27-cdc43e0184db.jpeg?width=360&t=${Date.now()}`} 
+                src={`https://cdn2.suno.ai/24c69462-2727-415e-8f27-cdc43e0184db.jpeg?width=360`} 
                 alt="Profile" 
                 width={64} 
                 height={64} 

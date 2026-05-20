@@ -2,13 +2,14 @@
 
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
-import { motion, useMotionValue, useTransform, type PanInfo } from "framer-motion"
+import { motion, useMotionValue, useTransform, type PanInfo, AnimatePresence } from "framer-motion"
 import { 
   ChevronDown, Music, AudioLinesIcon, Video, VideoOff,
   Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Shuffle,
-  Disc, Image as ImageIcon
+  Disc, Image as ImageIcon, Type
 } from "lucide-react"
-import Image from "next/image"
+import { LyricsDisplay } from "./LyricsDisplay"
+import { TrackImage as Image } from "./TrackImage"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -58,6 +59,7 @@ export function ExpandablePlayer({
   const [showVisualizer, setShowVisualizer] = useState(false)
   const [showVideo, setShowVideo] = useState(false)
   const [viewMode, setViewMode] = useState<'vinyl' | 'cover'>('vinyl')
+  const [showLyrics, setShowLyrics] = useState(false)
 
   // ── Local video YT instance ────────
   const videoPlayerRef = useRef<any>(null)
@@ -172,9 +174,22 @@ export function ExpandablePlayer({
   }, [showVideo, playbackSource, destroyVideoPlayer])
 
   const handleDragEnd = useCallback((_: any, info: PanInfo) => {
-    if (info.offset.y > 120 || info.velocity.y > 600) onExpandChange(false)
-    else y.set(0)
-  }, [onExpandChange, y])
+    if (info.offset.y > 120 || info.velocity.y > 600) {
+      if (showLyrics) {
+        setShowLyrics(false)
+        y.set(0)
+      } else {
+        onExpandChange(false)
+      }
+    } else if (info.offset.y < -120 || info.velocity.y < -600) {
+      if (!showLyrics) {
+        setShowLyrics(true)
+      }
+      y.set(0)
+    } else {
+      y.set(0)
+    }
+  }, [onExpandChange, y, showLyrics])
 
   const handleBackdropClick = useCallback(() => {
     if (window.innerWidth >= 1024) onExpandChange(false)
@@ -205,7 +220,7 @@ export function ExpandablePlayer({
         <div
           className="absolute inset-0 z-0"
           style={{
-            backgroundImage: `url(${currentTrack.thumbnail})`,
+            backgroundImage: `url(${(currentTrack.thumbnail.includes('.mp4') || currentTrack.thumbnail.includes('video_upload')) ? "https://cdn2.suno.ai/image_" + currentTrack.id + ".jpeg" : currentTrack.thumbnail})`,
             backgroundSize: "cover",
             backgroundPosition: "center",
             filter: "blur(60px) brightness(0.15) saturate(2)",
@@ -233,6 +248,7 @@ export function ExpandablePlayer({
       {/* ── Draggable panel ─────────────────────────────────────────────── */}
       <motion.div
         drag="y"
+        dragListener={!showLyrics}
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={0.15}
         onDragEnd={handleDragEnd}
@@ -261,7 +277,25 @@ export function ExpandablePlayer({
               Now Playing
             </p>
 
-              <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost" size="icon"
+                    onClick={() => setShowLyrics(prev => !prev)}
+                    aria-label={showLyrics ? "Hide Lyrics" : "Show Lyrics"}
+                    className={`h-10 w-10 transition-colors ${
+                      showLyrics
+                        ? "text-primary bg-primary/10 hover:bg-primary/20"
+                        : "text-white/60 hover:text-white hover:bg-primary/15"
+                    }`}
+                  >
+                    <Type size={18} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom"><p>{showLyrics ? "Hide Lyrics" : "Show Lyrics"}</p></TooltipContent>
+              </Tooltip>
+
               {playbackSource === "youtube" && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -539,6 +573,51 @@ export function ExpandablePlayer({
             <div className="h-16 lg:h-0" />
           </div>
         </div>
+
+        {/* ── Sliding up lyrics panel ─────────────────────────────── */}
+        <AnimatePresence>
+          {showLyrics && (
+            <motion.div
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={0.1}
+              onDragEnd={(_, info) => {
+                if (info.offset.y > 80 || info.velocity.y > 400) {
+                  setShowLyrics(false)
+                }
+              }}
+              initial={{ y: "100%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="absolute inset-0 z-[60] bg-zinc-950/95 backdrop-blur-3xl flex flex-col pt-4"
+              onClick={(e) => e.stopPropagation()} // don't close player when clicking lyrics
+            >
+              {/* Drag handle / Header for lyrics */}
+              <div className="flex-shrink-0 flex items-center justify-between px-6 pb-2 border-b border-white/5 cursor-grab active:cursor-grabbing">
+                <Button 
+                   variant="ghost" 
+                   size="icon" 
+                   onClick={() => setShowLyrics(false)}
+                   className="text-white/60 hover:text-white"
+                   aria-label="Close Lyrics"
+                >
+                   <ChevronDown size={28} />
+                </Button>
+                <div className="w-12 h-1.5 bg-white/20 rounded-full" />
+                <div className="w-10"></div> {/* placeholder for balance */}
+              </div>
+
+              {/* Prevent drag on scroll area */}
+              <div 
+                 className="flex-1 w-full max-w-4xl mx-auto overflow-hidden relative cursor-auto"
+                 onPointerDown={(e) => e.stopPropagation()}
+              >
+                <LyricsDisplay currentTime={currentTime} duration={duration} isPlaying={isPlaying} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
   )

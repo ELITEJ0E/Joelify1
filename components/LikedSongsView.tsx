@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useApp } from "@/contexts/AppContext"
 import { Play, Heart, MoreVertical, Plus } from "lucide-react"
-import Image from "next/image"
+import { TrackImage as Image } from "./TrackImage"
 import { Button } from "@/components/ui/button"
 import { 
   DropdownMenu, 

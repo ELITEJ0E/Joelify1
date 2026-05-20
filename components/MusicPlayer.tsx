@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, SkipBack, SkipForward, Palette, Link as LinkIcon, Disc, ArrowRight, Check, Repeat, Repeat1, Shuffle, ListMusic, Plus, Trash2, X, Save, Download, Image as ImageIcon, Mic } from 'lucide-react';
 import VinylRecord from './VinylRecord';
 
-import Image from 'next/image';
+import { TrackImage as Image } from './TrackImage';
 
 const THEMES = [
   { id: 'cover', name: 'Dynamic Art', colors: 'from-zinc-800 via-zinc-900 to-black', accent: 'amber' },
@@ -39,7 +39,7 @@ export default function MusicPlayer({ initialSongId }: { initialSongId?: string 
 
   const currentTrackInfo = playlist.find(p => p.id === songId);
   const audioUrl = `https://cdn1.suno.ai/${songId}.mp3`;
-  const imageUrl = currentTrackInfo?.thumbnail || `https://cdn1.suno.ai/image_${songId}.jpeg?v=${Date.now()}`;
+  const imageUrl = currentTrackInfo?.thumbnail || `https://cdn1.suno.ai/image_${songId}.jpeg`;
 
   useEffect(() => {
     if (initialSongId) {
@@ -626,7 +626,7 @@ export default function MusicPlayer({ initialSongId }: { initialSongId?: string 
                     >
                       <div className="flex items-center gap-4">
                         <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-zinc-800">
-                          <Image src={track.thumbnail || `https://cdn1.suno.ai/image_${track.id}.jpeg?v=${Date.now()}`} alt="" fill className="object-cover" referrerPolicy="no-referrer" />
+                          <Image src={track.thumbnail || `https://cdn1.suno.ai/image_${track.id}.jpeg`} alt="" fill className="object-cover" referrerPolicy="no-referrer" />
                           {songId === track.id && isPlaying && (
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-[1px]">
                               <div className="flex gap-0.5 items-end h-3">
