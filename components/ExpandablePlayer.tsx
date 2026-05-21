@@ -173,6 +173,32 @@ export function ExpandablePlayer({
     }
   }, [showVideo, playbackSource, destroyVideoPlayer])
 
+  // ── Touch / swipe handling for opening lyrics ─────────────
+  const touchStartY = useRef<number | null>(null)
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartY.current === null) return
+    const touchEndY = e.changedTouches[0].clientY
+    const deltaY = touchEndY - touchStartY.current
+    
+    // Swipe UP (deltaY is negative)
+    if (deltaY < -50 && !showLyrics) {
+      openLyrics()
+    }
+    touchStartY.current = null
+  }
+
+  const handleWheel = (e: React.WheelEvent) => {
+    // Scroll down (which moves page up) -> open lyrics
+    if (e.deltaY > 50 && !showLyrics) {
+      openLyrics()
+    }
+  }
+
   // History state for back button and Escape key
   const openLyrics = useCallback(() => {
     setShowLyrics(true);
@@ -279,8 +305,11 @@ export function ExpandablePlayer({
         drag="y"
         dragListener={!showLyrics}
         dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0.7, bottom: 0.2 }}
+        dragElastic={{ top: 0, bottom: 0.5 }}
         onDragEnd={handleDragEnd}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onWheel={handleWheel}
         style={{ y, opacity, scale }}
         className="relative h-full w-full flex flex-col z-20"
         onClick={(e) => e.stopPropagation()}
