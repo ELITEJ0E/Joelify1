@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useApp } from "@/contexts/AppContext";
 import { Button } from "@/components/ui/button";
-import { Check, Trash2, PlusSquare, Music2, Link, GripVertical, Play, Heart } from "lucide-react";
+import { Check, Trash2, PlusSquare, Music2, Link, GripVertical, Play, Heart, RefreshCw } from "lucide-react";
 import { CustomToast } from "./CustomToast";
 import { Input } from "@/components/ui/input";
 import { TrackImage as Image } from "./TrackImage";
@@ -415,17 +415,11 @@ export function JoelsMusicView() {
     }
   };
 
-  const handleSyncPrompt = () => {
-    const url = prompt("Paste Suno Playlist URL to sync (e.g., suno.com/playlist/...)");
-    if (url) {
-      const match = url.match(/playlist\/([a-zA-Z0-9-]+)/);
-      const uuidMatch = url.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
-      const id = (match && match[1]) ? match[1] : (uuidMatch ? uuidMatch[0] : null);
-      if (id) {
-        syncPlaylist(id);
-      } else {
-        toast.error("Invalid Suno Playlist URL or ID");
-      }
+  const handleAutoSync = () => {
+    if (syncPlaylistId) {
+      syncPlaylist(syncPlaylistId);
+    } else {
+      syncPlaylist(JOEL_PLAYLIST_ID);
     }
   };
 
@@ -517,10 +511,10 @@ export function JoelsMusicView() {
             size="sm" 
             variant="outline" 
             className="h-9 px-4 font-medium border-primary/20 hover:bg-primary/10" 
-            onClick={handleSyncPrompt}
+            onClick={handleAutoSync}
             disabled={isSyncing}
           >
-            <PlusSquare className="w-4 h-4 mr-2" /> 
+            <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? "animate-spin" : ""}`} /> 
             Sync Playlist
           </Button>
         </div>

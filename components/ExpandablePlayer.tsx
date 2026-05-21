@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
-import { motion, useMotionValue, useTransform, type PanInfo, AnimatePresence } from "framer-motion"
+import { motion, useMotionValue, useTransform, type PanInfo, AnimatePresence, animate } from "framer-motion"
 import { 
   ChevronDown, Music, AudioLinesIcon, Video, VideoOff,
   Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Shuffle,
@@ -173,36 +173,65 @@ export function ExpandablePlayer({
     }
   }, [showVideo, playbackSource, destroyVideoPlayer])
 
+  // History state for back button and Escape key
+  const openLyrics = useCallback(() => {
+    setShowLyrics(true);
+    window.history.pushState({ ...window.history.state, expandableLyrics: true }, "");
+  }, [])
+
+  const closeLyrics = useCallback(() => {
+    setShowLyrics(false);
+    if (window.history.state?.expandableLyrics) {
+      window.history.back();
+    }
+  }, [])
+
   const handleDragEnd = useCallback((_: any, info: PanInfo) => {
-    if (info.offset.y > 120 || info.velocity.y > 600) {
+    // If dragging down (close player)
+    if (info.offset.y > 100 || info.velocity.y > 500) {
       if (showLyrics) {
-        setShowLyrics(false)
-        y.set(0)
+        closeLyrics()
       } else {
         onExpandChange(false)
       }
-    } else if (info.offset.y < -120 || info.velocity.y < -600) {
+    } 
+    // If dragging up (open lyrics)
+    else if (info.offset.y < -50 || info.velocity.y < -400) {
       if (!showLyrics) {
-        setShowLyrics(true)
+        openLyrics()
       }
-      y.set(0)
-    } else {
-      y.set(0)
     }
-  }, [onExpandChange, y, showLyrics])
+    animate(y, 0, { type: "spring", stiffness: 300, damping: 30 })
+  }, [onExpandChange, y, showLyrics, openLyrics, closeLyrics])
 
   const handleBackdropClick = useCallback(() => {
     if (window.innerWidth >= 1024) onExpandChange(false)
   }, [onExpandChange])
 
-  // Escape key closes the player
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      if (!e.state?.expandableLyrics && showLyrics) {
+        setShowLyrics(false);
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [showLyrics]);
+
+  // Escape key closes the player or lyrics
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onExpandChange(false)
+      if (e.key === "Escape") {
+        if (showLyrics) {
+          closeLyrics();
+        } else {
+          onExpandChange(false);
+        }
+      }
     }
     if (isExpanded) window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [isExpanded, onExpandChange])
+  }, [isExpanded, onExpandChange, showLyrics])
 
   if (!isExpanded) return null
 
@@ -250,7 +279,7 @@ export function ExpandablePlayer({
         drag="y"
         dragListener={!showLyrics}
         dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={0.15}
+        dragElastic={{ top: 0.7, bottom: 0.2 }}
         onDragEnd={handleDragEnd}
         style={{ y, opacity, scale }}
         className="relative h-full w-full flex flex-col z-20"
@@ -282,7 +311,7 @@ export function ExpandablePlayer({
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost" size="icon"
-                    onClick={() => setShowLyrics(prev => !prev)}
+                    onClick={() => showLyrics ? closeLyrics() : openLyrics()}
                     aria-label={showLyrics ? "Hide Lyrics" : "Show Lyrics"}
                     className={`h-10 w-10 transition-colors ${
                       showLyrics
@@ -580,10 +609,10 @@ export function ExpandablePlayer({
             <motion.div
               drag="y"
               dragConstraints={{ top: 0, bottom: 0 }}
-              dragElastic={0.1}
+              dragElastic={{ top: 0, bottom: 0.7 }}
               onDragEnd={(_, info) => {
                 if (info.offset.y > 80 || info.velocity.y > 400) {
-                  setShowLyrics(false)
+                  closeLyrics()
                 }
               }}
               initial={{ y: "100%", opacity: 0 }}
@@ -598,7 +627,7 @@ export function ExpandablePlayer({
                 <Button 
                    variant="ghost" 
                    size="icon" 
-                   onClick={() => setShowLyrics(false)}
+                   onClick={closeLyrics}
                    className="text-white/60 hover:text-white"
                    aria-label="Close Lyrics"
                 >
