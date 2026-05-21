@@ -50,26 +50,33 @@ export function PlayerControls() {
 
   const handlePopState = useCallback((event: PopStateEvent) => {
     const state = event.state;
+    // If state specifically asks to keep the modal open, don't close it
+    if (state?.keepModalOpen) {
+       return;
+    }
+    
     if (!state || !state.modal) {
       setIsExpandedPlayer(false);
       setIsMiniPlayer(false);
       setIsLyricsOpen(false);
       setIsQueueOpen(false);
     } else {
-      // If we have a specific modal state, we could handle it here,
-      // but the general "back" button should close whichever is top.
-      // However, popstate means we ALREADY navigated back, so we just
-      // need to ensure the UI reflects the closed state.
-      setIsExpandedPlayer(false);
-      setIsMiniPlayer(false);
-      setIsLyricsOpen(false);
-      setIsQueueOpen(false);
+      // If there IS a modal state, it implies we navigated back from a DEEPER modal.
+      // So we should NOT force close everything! The UI should remain open.
+      // E.g. we popped from {modal: true, type: 'lyrics'} back to {modal: true}
     }
   }, []);
 
+  // Track the previous combined state so we don't push multiple times for the same logical modal layer
   useEffect(() => {
-    if (isExpandedPlayer || isMiniPlayer || isLyricsOpen || isQueueOpen) {
+    const hasModal = isExpandedPlayer || isMiniPlayer || isLyricsOpen || isQueueOpen;
+    // We only want to push state when going from NO modal to SOME modal.
+    // If we transition between modals, we shouldn't push a new history entry, or handling gets too complex.
+    if (hasModal && !window.history.state?.modal) {
       window.history.pushState({ modal: true }, "");
+    }
+    
+    if (hasModal) {
       window.addEventListener("popstate", handlePopState);
     } else {
       window.removeEventListener("popstate", handlePopState);
