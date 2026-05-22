@@ -110,12 +110,23 @@ export function LyricsDisplay({ currentTime, isPlaying, duration }: LyricsDispla
 
   useEffect(() => {
     if (!isAutoScroll) return;
-    if (lineRefs.current[currentLineIndex] && scrollRef.current) {
+    const lineEl = lineRefs.current[currentLineIndex];
+    const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    
+    if (lineEl && viewport) {
       isProgrammaticScroll.current = true;
       requestAnimationFrame(() => {
-        lineRefs.current[currentLineIndex]?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
+        // Calculate the top position relative to the viewport
+        const viewportHeight = viewport.clientHeight;
+        const lineTop = lineEl.offsetTop;
+        const lineHeight = lineEl.offsetHeight;
+        
+        // Scroll so the line is centered
+        const targetScrollTop = lineTop - (viewportHeight / 2) + (lineHeight / 2);
+        
+        viewport.scrollTo({
+          top: targetScrollTop,
+          behavior: "smooth"
         });
       });
       setTimeout(() => {
