@@ -175,6 +175,7 @@ export function ExpandablePlayer({
 
   // ── Touch / swipe handling for opening lyrics ─────────────
   const touchStartY = useRef<number | null>(null)
+  const wheelAccumulator = useRef<number>(0)
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY
@@ -186,31 +187,47 @@ export function ExpandablePlayer({
     const deltaY = touchEndY - touchStartY.current
     
     // Swipe UP (deltaY is negative)
-    if (deltaY < -50 && !showLyrics) {
+    if (deltaY < -40 && !showLyrics) {
       openLyrics()
     }
     touchStartY.current = null
   }
 
   const handleWheel = (e: React.WheelEvent) => {
+    if (showLyrics) return;
+    
+    wheelAccumulator.current += e.deltaY;
+    
     // Scroll down (which moves page up) -> open lyrics
-    if (e.deltaY > 50 && !showLyrics) {
+    // Trackpads can have small but rapid deltaY values
+    if (wheelAccumulator.current > 40) {
       openLyrics()
+      wheelAccumulator.current = 0;
+    } else if (wheelAccumulator.current < -40) {
+      wheelAccumulator.current = 0;
     }
+    
+    // Reset accumulator quickly to avoid false positives
+    setTimeout(() => {
+        wheelAccumulator.current = 0;
+    }, 150);
   }
 
-  // History state for back button and Escape key
   const openLyrics = useCallback(() => {
     setShowLyrics(true);
-    window.history.pushState({ ...window.history.state, expandableLyrics: true }, "");
-  }, [])
+    y.set(0); // Force y to 0 to prevent gap
+  }, [y]);
 
   const closeLyrics = useCallback(() => {
     setShowLyrics(false);
-    if (window.history.state?.expandableLyrics) {
-      window.history.back();
+    y.set(0); // Force y to 0 to prevent gap
+  }, [y]);
+
+  useEffect(() => {
+    if (showLyrics) {
+      y.set(0);
     }
-  }, [])
+  }, [showLyrics, y]);
 
   const handleDragEnd = useCallback((_: any, info: PanInfo) => {
     // If dragging down (close player)
@@ -227,24 +244,13 @@ export function ExpandablePlayer({
         openLyrics()
       }
     }
-    animate(y, 0, { type: "spring", stiffness: 300, damping: 30 })
-  }, [onExpandChange, y, showLyrics, openLyrics, closeLyrics])
+  }, [onExpandChange, showLyrics, openLyrics, closeLyrics])
 
   const handleBackdropClick = useCallback(() => {
     if (window.innerWidth >= 1024) onExpandChange(false)
   }, [onExpandChange])
 
-  useEffect(() => {
-    const onPop = (e: PopStateEvent) => {
-      if (!e.state?.expandableLyrics && showLyrics) {
-        setShowLyrics(false);
-      }
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [showLyrics]);
-
-  // Escape key closes the player or lyrics
+  // Optional: escape key closes the player or lyrics
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -255,9 +261,46 @@ export function ExpandablePlayer({
         }
       }
     }
-    if (isExpanded) window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [isExpanded, onExpandChange, showLyrics])
+    if (isExpanded) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [isExpanded, onExpandChange, showLyrics, closeLyrics])
+
+  // Prevent pull-to-refresh globally when expanded
+  useEffect(() => {
+    if (isExpanded) {
+      document.documentElement.style.overscrollBehavior = 'none';
+      document.body.style.overscrollBehavior = 'none';
+      
+      // Cleanup existing just in case
+      let style = document.getElementById('prevent-pull-to-refresh');
+      if (!style) {
+        style = document.createElement('style');
+        style.id = 'prevent-pull-to-refresh';
+        style.textContent = `
+          body, html {
+            overscroll-behavior-y: none !important;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    } else {
+      document.documentElement.style.overscrollBehavior = '';
+      document.body.style.overscrollBehavior = '';
+      const style = document.getElementById('prevent-pull-to-refresh');
+      if (style) style.remove();
+    }
+    
+    return () => {
+      document.documentElement.style.overscrollBehavior = '';
+      document.body.style.overscrollBehavior = '';
+      const style = document.getElementById('prevent-pull-to-refresh');
+      if (style) style.remove();
+    }
+  }, [isExpanded])
 
   if (!isExpanded) return null
 
@@ -267,7 +310,7 @@ export function ExpandablePlayer({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed inset-0 z-50 overflow-hidden"
+      className="fixed inset-0 z-50 overflow-hidden overscroll-none"
       onClick={handleBackdropClick}
     >
       {/* ── Album-art blur backdrop ──────────────────────────────────────── */}
@@ -305,7 +348,7 @@ export function ExpandablePlayer({
         drag="y"
         dragListener={!showLyrics}
         dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.5 }}
+        dragElastic={{ top: 0.1, bottom: 0.5 }}
         onDragEnd={handleDragEnd}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -420,7 +463,7 @@ export function ExpandablePlayer({
 
         {/* ── Main content with responsive layout ───────────────────── */}
         {/* Fixed height container to prevent shifting */}
-        <div className="flex-1 flex flex-col lg:flex-row lg:items-center lg:justify-center lg:gap-12 xl:gap-16 px-5 md:px-8 lg:px-12 pb-safe overflow-y-auto">
+        <div className="flex-1 flex flex-col lg:flex-row lg:items-center lg:justify-center lg:gap-12 xl:gap-16 px-5 md:px-8 lg:px-12 pb-safe overflow-hidden">
           {/* LEFT SIDE - Fixed height container */}
           <div className="lg:flex-1 lg:flex lg:justify-end w-full">
             <div className="flex flex-col items-center w-full">
@@ -668,8 +711,9 @@ export function ExpandablePlayer({
 
               {/* Prevent drag on scroll area */}
               <div 
-                 className="flex-1 w-full max-w-4xl mx-auto overflow-hidden relative cursor-auto"
+                 className="flex-1 w-full max-w-4xl mx-auto overflow-hidden relative cursor-auto overscroll-none overscroll-y-none"
                  onPointerDown={(e) => e.stopPropagation()}
+                 onTouchStart={(e) => e.stopPropagation()}
               >
                 <LyricsDisplay currentTime={currentTime} duration={duration} isPlaying={isPlaying} />
               </div>
