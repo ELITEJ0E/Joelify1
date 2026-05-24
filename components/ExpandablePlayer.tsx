@@ -37,6 +37,11 @@ interface ExpandablePlayerProps {
   onVideoActiveChange?: (videoActive: boolean) => void
 }
 
+function isValidYouTubeId(id: string | undefined | null): boolean {
+  if (!id) return false
+  return /^[a-zA-Z0-9_-]{11}$/.test(id)
+}
+
 export function ExpandablePlayer({
   isExpanded,
   onExpandChange,
@@ -100,7 +105,7 @@ export function ExpandablePlayer({
 
   // ── Init video player when showVideo becomes true ──────────────────────────
   useEffect(() => {
-    if (!isExpanded || !showVideo || !currentTrack?.id || playbackSource !== "youtube") return
+    if (!isExpanded || !showVideo || !isValidYouTubeId(currentTrack?.id) || playbackSource !== "youtube") return
 
     const timer = setTimeout(() => {
       if (!window.YT?.Player || videoPlayerRef.current) return
@@ -173,25 +178,8 @@ export function ExpandablePlayer({
     }
   }, [showVideo, playbackSource, destroyVideoPlayer])
 
-  // ── Touch / swipe handling for opening lyrics ─────────────
-  const touchStartY = useRef<number | null>(null)
+  // ── Swipe handling for opening lyrics ─────────────
   const wheelAccumulator = useRef<number>(0)
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY
-  }
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartY.current === null) return
-    const touchEndY = e.changedTouches[0].clientY
-    const deltaY = touchEndY - touchStartY.current
-    
-    // Swipe UP (deltaY is negative)
-    if (deltaY < -40 && !showLyrics) {
-      openLyrics()
-    }
-    touchStartY.current = null
-  }
 
   const handleWheel = (e: React.WheelEvent) => {
     if (showLyrics) return;
@@ -214,20 +202,42 @@ export function ExpandablePlayer({
   }
 
   const openLyrics = useCallback(() => {
+    window.history.pushState({ modal: true, type: 'expandableLyrics' }, "");
+    showLyricsRef.current = true;
     setShowLyrics(true);
-    y.set(0); // Force y to 0 to prevent gap
+    animate(y, 0, { type: "spring", stiffness: 300, damping: 30 });
   }, [y]);
 
   const closeLyrics = useCallback(() => {
+    showLyricsRef.current = false;
     setShowLyrics(false);
-    y.set(0); // Force y to 0 to prevent gap
+    animate(y, 0, { type: "spring", stiffness: 300, damping: 30 });
+    
+    // Defer history back so UI updates immediately
+    setTimeout(() => {
+      if (window.history.state?.type === 'expandableLyrics') {
+        window.history.back();
+      }
+    }, 0);
   }, [y]);
 
+  const showLyricsRef = useRef(false);
+  
   useEffect(() => {
-    if (showLyrics) {
-      y.set(0);
-    }
-  }, [showLyrics, y]);
+    showLyricsRef.current = showLyrics;
+  }, [showLyrics]);
+
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (e.state?.type !== 'expandableLyrics' && showLyricsRef.current) {
+        showLyricsRef.current = false;
+        setShowLyrics(false);
+        animate(y, 0, { type: "spring", stiffness: 300, damping: 30 });
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [y]);
 
   const handleDragEnd = useCallback((_: any, info: PanInfo) => {
     // If dragging down (close player)
@@ -350,8 +360,6 @@ export function ExpandablePlayer({
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={{ top: 0.1, bottom: 0.5 }}
         onDragEnd={handleDragEnd}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
         onWheel={handleWheel}
         style={{ y, opacity, scale }}
         className="relative h-full w-full flex flex-col z-20"

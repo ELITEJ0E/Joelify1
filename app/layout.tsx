@@ -35,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
         <script src="https://www.youtube.com/iframe_api" async></script>
         <meta name="mobile-web-app-capable" content="yes" />
@@ -44,7 +44,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Joelify" />
         <meta name="theme-color" content="#000000" />
       </head>
-      <body className={`${inter.className} select-none`}>
+      <body className={`${inter.className} select-none`} suppressHydrationWarning>
         <Suspense fallback={null}>
           <TooltipProvider>
             <AppProvider>{children}</AppProvider>

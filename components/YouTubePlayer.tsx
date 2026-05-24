@@ -22,6 +22,11 @@ interface YouTubePlayerProps {
   isPlaying?: boolean
 }
 
+function isValidYouTubeId(id: string | undefined | null): boolean {
+  if (!id) return false
+  return /^[a-zA-Z0-9_-]{11}$/.test(id)
+}
+
 export function YouTubePlayer(props: YouTubePlayerProps) {
   return <YouTubeIframePlayer {...props} />
 }
@@ -118,7 +123,7 @@ function YouTubeIframePlayer({
 
   useEffect(() => {
     const initPlayer = () => {
-      if (!window.YT?.Player || !containerRef.current || playerRef.current || !currentTrack?.id || playbackSource !== "youtube") return
+      if (!window.YT?.Player || !containerRef.current || playerRef.current || !isValidYouTubeId(currentTrack?.id) || playbackSource !== "youtube") return
       const playerVars: any = {
         autoplay: 1, controls: 0, disablekb: 1, fs: 0,
         modestbranding: 1, playsinline: 1, rel: 0, iv_load_policy: 3,
@@ -134,15 +139,17 @@ function YouTubeIframePlayer({
           onReady: (event: any) => {
             isPlayerReadyRef.current = true
             event.target.setVolume(100)
-            if (isPlayingRef.current) {
-              event.target.loadVideoById(currentTrack.id)
-              setTimeout(() => {
-                if (event.target.getPlayerState?.() !== 1) {
-                  event.target.playVideo?.()
-                }
-              }, 150)
-            } else {
-              event.target.cueVideoById(currentTrack.id)
+            if (isValidYouTubeId(currentTrack?.id)) {
+              if (isPlayingRef.current) {
+                event.target.loadVideoById(currentTrack.id)
+                setTimeout(() => {
+                  if (event.target.getPlayerState?.() !== 1) {
+                    event.target.playVideo?.()
+                  }
+                }, 150)
+              } else {
+                event.target.cueVideoById(currentTrack.id)
+              }
             }
             startDurationPolling(event.target)
             onPlayerReadyRef.current(event.target)
@@ -177,7 +184,7 @@ function YouTubeIframePlayer({
         tag, document.getElementsByTagName("script")[0]
       )
     }
-    if (currentTrack?.id && playbackSource === "youtube") {
+    if (isValidYouTubeId(currentTrack?.id) && playbackSource === "youtube") {
       if (window.YT?.Player) initPlayer()
       else window.onYouTubeIframeAPIReady = initPlayer
     }
@@ -193,7 +200,7 @@ function YouTubeIframePlayer({
   }, [audioSettings, currentTrack?.id, playbackSource]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (playerRef.current && isPlayerReadyRef.current && currentTrack?.id && playbackSource === "youtube") {
+    if (playerRef.current && isPlayerReadyRef.current && isValidYouTubeId(currentTrack?.id) && playbackSource === "youtube") {
       const currentId = playerRef.current.getVideoData?.()?.video_id;
       if (currentId === currentTrack.id) return;
 
@@ -201,15 +208,17 @@ function YouTubeIframePlayer({
       durationPollIntervalRef.current = null
       stopProgressTracking()
       
-      if (isPlayingRef.current) {
-        playerRef.current.loadVideoById(currentTrack.id)
-        setTimeout(() => {
-          if (playerRef.current?.getPlayerState?.() !== 1) {
-            playerRef.current?.playVideo?.()
-          }
-        }, 150)
-      } else {
-        playerRef.current.cueVideoById(currentTrack.id)
+      if (isValidYouTubeId(currentTrack.id)) {
+        if (isPlayingRef.current) {
+          playerRef.current.loadVideoById(currentTrack.id)
+          setTimeout(() => {
+            if (playerRef.current?.getPlayerState?.() !== 1) {
+              playerRef.current?.playVideo?.()
+            }
+          }, 150)
+        } else {
+          playerRef.current.cueVideoById(currentTrack.id)
+        }
       }
       
       setTimeout(() => startDurationPolling(playerRef.current), 500)
