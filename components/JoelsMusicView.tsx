@@ -163,9 +163,11 @@ export function JoelsMusicView() {
     setSyncPlaylistId(savedId);
   }, []);
 
-  const syncPlaylist = async (id: string) => {
-    setIsSyncing(true);
-    setSyncError(false);
+  const syncPlaylist = async (id: string, isRetry = false) => {
+    if (!isRetry) {
+      setIsSyncing(true);
+      setSyncError(false);
+    }
     try {
       const res = await fetch(`/api/suno-playlist?id=${id}&_t=${Date.now()}`);
       
@@ -224,16 +226,20 @@ export function JoelsMusicView() {
       }
     } catch (error: any) {
       console.error("Sync error:", error);
-      setSyncError(true);
-      const isSunoError = error?.message?.includes("Suno API");
+      const isSunoError = error?.message?.includes("Suno API") || error?.message?.includes("Invalid JSON response");
       
-      if (isSunoError) {
-        // Auto-retry once after 3 seconds in background
-        setTimeout(() => syncPlaylist(id), 3000);
+      if (isSunoError && !isRetry) {
+        console.log("Retrying sync sequentially in 2s...");
+        setTimeout(() => syncPlaylist(id, true), 2000);
+        return; // Early return to prevent hiding loading spinner
       }
+      
+      setSyncError(true);
     } finally {
-      setIsSyncing(false);
-      setInitialLoading(false);
+      if (!isRetry || syncError) {
+        setIsSyncing(false);
+        setInitialLoading(false);
+      }
     }
   };
 

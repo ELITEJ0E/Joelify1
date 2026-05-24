@@ -457,7 +457,12 @@ export function PlayerControls() {
   const playbackSourceRef = useRef(playbackSource);
   useEffect(() => {
     playbackSourceRef.current = playbackSource;
-  }, [playbackSource]);
+    if (playbackSource === "youtube" && sunoAudioRef.current) {
+      sunoAudioRef.current.pause();
+    } else if (playbackSource === "suno" && youtubePlayer && typeof youtubePlayer.pauseVideo === 'function') {
+      youtubePlayer.pauseVideo();
+    }
+  }, [playbackSource, youtubePlayer]);
 
   useEffect(() => {
     // Do not process track changes until context is fully initialized
@@ -606,17 +611,6 @@ export function PlayerControls() {
       audio.addEventListener("play", onPlay);
       audio.addEventListener("pause", onPause);
 
-      // Play audio if it was already supposed to be playing
-      if (currentTrack && isPlaying && initialLoadHandledRef.current) {
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(e => {
-                console.warn("Suno background play rejected:", e);
-                setIsPlaying(false);
-            });
-        }
-      }
-
       return () => {
         audio.removeEventListener("timeupdate", onTimeUpdate);
         audio.removeEventListener("loadedmetadata", onLoadedMetadata);
@@ -657,7 +651,6 @@ export function PlayerControls() {
 
   const handleSleepTimerEnd = useCallback(() => {
     if (playbackSource === "youtube" && youtubePlayer) youtubePlayer.pauseVideo()
-    else if (playbackSource === "suno" && sunoAudioRef.current) sunoAudioRef.current.pause()
     else if (playbackSource === "suno" && sunoAudioRef.current) sunoAudioRef.current.pause()
     setIsPlaying(false)
   }, [youtubePlayer, playbackSource])
@@ -1052,12 +1045,14 @@ export function PlayerControls() {
         </div>
       </div>
     )}
+    {playbackSource === "suno" && (
       <audio
         ref={sunoAudioRef}
-        src={playbackSource === "suno" && currentTrack ? `https://cdn1.suno.ai/${currentTrack.id}.mp3` : undefined}
+        src={currentTrack ? `https://cdn1.suno.ai/${currentTrack.id}.mp3` : undefined}
         preload="auto"
         className="hidden"
       />
+    )}
     </>
   )
 }
