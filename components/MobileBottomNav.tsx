@@ -9,8 +9,8 @@ interface MobileBottomNavProps {
 
 export function MobileBottomNav({ currentView, onNavigate }: MobileBottomNavProps) {
   return (
-    <div className="lg:hidden bg-black/80 backdrop-blur-xl border-t border-white/[0.07] pb-safe z-40">
-      <div className="flex justify-around items-center p-2">
+    <div className="lg:hidden bg-black/80 backdrop-blur-xl border-t border-white/[0.07] pb-[env(safe-area-inset-bottom)] z-40">
+      <div className="flex justify-around items-center pt-2 pb-1">
         <button
           onClick={() => onNavigate("home")}
           className={`flex flex-col items-center justify-center space-y-1 w-full py-1 ${
