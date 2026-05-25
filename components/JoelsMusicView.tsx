@@ -271,7 +271,7 @@ export function JoelsMusicView() {
               source: "suno",
               lyrics: clip.metadata?.prompt || clip.metadata?.text || undefined,
               thumbnail: clip.image_url || clip.image_large_url || null,
-            }));
+            })).reverse();
             serverData = { tracks: formattedTracks };
             didServerSucceed = true;
             console.log(`Client-side scraping succeeded with ${proxy.name}:`, formattedTracks.length, "tracks");
