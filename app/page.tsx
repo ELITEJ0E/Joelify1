@@ -5,6 +5,7 @@ import { Menu } from "lucide-react"
 import { Sidebar } from "../components/Sidebar"
 import { MainContent } from "../components/MainContent"
 import { PlayerControls } from "../components/PlayerControls"
+import { MobileBottomNav } from "../components/MobileBottomNav"
 import { Button } from "@/components/ui/button"
 import { LoadingScreen } from "@/components/LoadingScreen"
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt"
@@ -98,6 +99,7 @@ export default function Home() {
         </div>
 
         <PlayerControls />
+        <MobileBottomNav currentView={currentView} onNavigate={handleNavigate} />
       </div>
 
       <PWAInstallPrompt />
