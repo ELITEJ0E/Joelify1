@@ -1,17 +1,30 @@
 "use client"
 
+import { useState } from "react"
 import { useApp } from "@/contexts/AppContext"
-import { Play, Music2 } from "lucide-react"
+import { Play, Music2, Plus } from "lucide-react"
 import { TrackImage as Image } from "./TrackImage"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 interface LibraryViewProps {
   onNavigate: (view: "home" | "search" | "playlist" | "liked" | "library") => void
 }
 
 export function LibraryView({ onNavigate }: LibraryViewProps) {
-  const { playlists, likedSongs, setCurrentPlaylistId, setCurrentTrack, setQueue, addRecentlyPlayed } = useApp()
+  const { playlists, likedSongs, setCurrentPlaylistId, setCurrentTrack, setQueue, addRecentlyPlayed, addPlaylist } = useApp()
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [newPlaylistName, setNewPlaylistName] = useState("")
 
   const handlePlayPlaylist = (playlistId: string) => {
     const playlist = playlists.find((p) => p.id === playlistId)
@@ -34,12 +47,61 @@ export function LibraryView({ onNavigate }: LibraryViewProps) {
     onNavigate("playlist")
   }
 
+  const handleCreatePlaylist = () => {
+    if (newPlaylistName.trim()) {
+      addPlaylist(newPlaylistName.trim())
+      setNewPlaylistName("")
+      setIsCreateDialogOpen(false)
+    }
+  }
+
   const totalTracks = playlists.reduce((acc, p) => acc + p.tracks.length, 0)
 
   return (
     <div className="flex-1 bg-gradient-to-b from-[hsl(var(--primary)/0.06)] to-transparent text-foreground p-4 md:p-8 overflow-y-auto">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-2">Your Library</h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">Your Library</h1>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-primary hover:bg-primary/90 text-white rounded-full">
+                <Plus size={20} className="mr-2" />
+                Create Playlist
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="text-primary">Create New Playlist</DialogTitle>
+                <DialogDescription className="text-gray-300">
+                  Give your playlist a name to get started.
+                </DialogDescription>
+              </DialogHeader>
+              <Input
+                placeholder="My Playlist"
+                value={newPlaylistName}
+                onChange={(e) => setNewPlaylistName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreatePlaylist()}
+                className="border-primary bg-gray-800/50 text-gray-100 focus:ring-2 focus:ring-primary transition-all duration-200"
+              />
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsCreateDialogOpen(false)}
+                  className="border-primary text-gray-300 hover:bg-gray-800/50"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreatePlaylist}
+                  disabled={!newPlaylistName.trim()}
+                  className="bg-primary hover:bg-primary/90 text-white"
+                >
+                  Create
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
         <p className="text-muted-foreground mb-8">
           {playlists.length} {playlists.length === 1 ? "playlist" : "playlists"} • {totalTracks}{" "}
           {totalTracks === 1 ? "song" : "songs"}
