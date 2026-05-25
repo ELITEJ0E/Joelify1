@@ -168,20 +168,124 @@ export function JoelsMusicView() {
       setIsSyncing(true);
       setSyncError(false);
     }
+    
+    let serverData: any = null;
+    let didServerSucceed = false;
+
+    // TRY SERVER PROXIES
     try {
       const res = await fetch(`/api/suno-playlist?id=${id}&_t=${Date.now()}`);
-      
       const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        throw new Error(`Invalid JSON response from server: ${res.status} - ${text.substring(0, 50)}`);
+      try { serverData = JSON.parse(text); } catch (e) { console.warn("Invalid server JSON"); }
+      if (res.ok && serverData?.tracks && serverData.tracks.length > 0) {
+        didServerSucceed = true;
       }
-      
-      if (data.isRestricted) {
+    } catch (e) {
+      console.warn("Server route failed, trying client proxies.");
+    }
+
+    // TRY CLIENT PROXIES (Bypass Vercel blocks)
+    if (!didServerSucceed) {
+      console.log("Attempting client-side extraction...");
+      const clientProxies = [
+        {
+          name: "AllOrigins",
+          url: (uid: string) => "https://api.allorigins.win/get?url=" + encodeURIComponent(`https://suno.com/playlist/${uid}`),
+          parse: (data: any) => data?.contents
+        },
+        {
+          name: "CodeTabs",
+          url: (uid: string) => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(`https://suno.com/playlist/${uid}`),
+          parse: (data: any) => typeof data === "string" ? data : JSON.stringify(data)
+        },
+        {
+          name: "CorsProxyIO",
+          url: (uid: string) => "https://corsproxy.io/?url=" + encodeURIComponent(`https://suno.com/playlist/${uid}`),
+          parse: (data: any) => typeof data === "string" ? data : JSON.stringify(data)
+        }
+      ];
+
+      for (const proxy of clientProxies) {
+        try {
+          const fetchUrl = proxy.url(id);
+          const res = await fetch(fetchUrl);
+          if (!res.ok) continue;
+
+          let rawData;
+          const contentType = res.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            rawData = await res.json();
+          } else {
+            rawData = await res.text();
+          }
+
+          const html = proxy.parse(rawData);
+          if (!html || typeof html !== "string") continue;
+          
+          let foundClips: any[] = [];
+          for (const match of html.matchAll(/self\.__next_f\.push\((\[1,"(?:\\.|[^"\\])*"\])\)/g)) {
+              try {
+                const arr = JSON.parse(match[1]);
+                const str = arr[1];
+                if (typeof str !== 'string') continue;
+                let startIdx = str.indexOf('"playlist_clips":');
+                if (startIdx !== -1) {
+                    const objStart = str.lastIndexOf('{', startIdx);
+                    if (objStart !== -1) {
+                        let braceCount = 0;
+                        for (let i = objStart; i < str.length; i++) {
+                            if (str[i] === '{') braceCount++;
+                            else if (str[i] === '}') {
+                                braceCount--;
+                                if (braceCount === 0) {
+                                    try {
+                                        const jsonObj = JSON.parse(str.substring(objStart, i + 1));
+                                        if (jsonObj?.playlist_clips?.length > 0) {
+                                            foundClips = jsonObj.playlist_clips.map((pc: any) => pc.clip).filter(Boolean);
+                                            break;
+                                        }
+                                    } catch(e) {}
+                                }
+                            }
+                        }
+                    }
+                }
+                if (foundClips.length > 0) break;
+              } catch(e) {}
+          }
+
+          const formatDuration = (val: number) => {
+            if (!val) return "0:00";
+            const d = Math.round(val);
+            return `${Math.floor(d / 60)}:${Math.floor(d % 60).toString().padStart(2, "0")}`;
+          };
+
+          if (foundClips.length > 0) {
+            const formattedTracks = foundClips.map((clip: any) => ({
+              id: clip.id || clip.clip_id,
+              title: clip.title || "Unknown Title",
+              artist: clip.display_name || "Suno AI",
+              coverImage: clip.image_url || clip.image_large_url,
+              src: clip.audio_url || clip.video_url,
+              duration: clip.metadata?.duration ? formatDuration(clip.metadata.duration) : "0:00",
+              source: "suno",
+              lyrics: clip.metadata?.prompt || clip.metadata?.text || undefined,
+              thumbnail: clip.image_url || clip.image_large_url || null,
+            }));
+            serverData = { tracks: formattedTracks };
+            didServerSucceed = true;
+            console.log(`Client-side scraping succeeded with ${proxy.name}:`, formattedTracks.length, "tracks");
+            break;
+          }
+        } catch (err) {
+          console.warn(`Proxy fallback ${proxy.name} failed:`, err);
+        }
+      }
+    }
+
+    if (!didServerSucceed) {
         // Silent fallback - users just see existing or fallback songs
-        console.warn("Suno API is restricted:", data.error);
+        console.warn("Suno API restricted or proxies failed");
         if (joelsSongs.length === 0) {
              setJoelsSongs([...FALLBACK_SONGS].reverse());
         } else {
@@ -195,52 +299,36 @@ export function JoelsMusicView() {
                 return [...[...missing].reverse(), ...updated];
              });
         }
-        return;
-      }
-      
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to sync");
-      }
-
-      if (data.tracks) {
-        // Apply cache buster to images
-        const timestamp = Date.now();
-        const tracksWithBuster = data.tracks.map((t: any) => ({
-          ...t,
-          thumbnail: t.thumbnail ? (t.thumbnail.includes('?') ? `${t.thumbnail}&_t=${timestamp}` : `${t.thumbnail}?_t=${timestamp}`) : t.thumbnail
-        }));
-        
-        // Merge with existing songs, prioritizing new data for matches, but keeping everything else (like fallbacks)
-        setJoelsSongs(prev => {
-          const newSongs = [...tracksWithBuster];
-          prev.forEach(oldTrack => {
-            if (!newSongs.some((t: any) => t.id === oldTrack.id)) {
-              newSongs.push(oldTrack);
-            }
-          });
-          return newSongs;
-        });
-        
-        setSyncPlaylistId(id);
-        localStorage.setItem('joel_sync_playlist_id', id);
-      }
-    } catch (error: any) {
-      console.error("Sync error:", error);
-      const isSunoError = error?.message?.includes("Suno API") || error?.message?.includes("Invalid JSON response");
-      
-      if (isSunoError && !isRetry) {
-        console.log("Retrying sync sequentially in 2s...");
-        setTimeout(() => syncPlaylist(id, true), 2000);
-        return; // Early return to prevent hiding loading spinner
-      }
-      
-      setSyncError(true);
-    } finally {
-      if (!isRetry || syncError) {
         setIsSyncing(false);
         setInitialLoading(false);
-      }
+        return;
     }
+    
+    if (serverData?.tracks) {
+      // Apply cache buster to images
+      const timestamp = Date.now();
+      const tracksWithBuster = serverData.tracks.map((t: any) => ({
+        ...t,
+        thumbnail: t.thumbnail ? (t.thumbnail.includes('?') ? `${t.thumbnail}&_t=${timestamp}` : `${t.thumbnail}?_t=${timestamp}`) : t.thumbnail
+      }));
+      
+      // Merge with existing songs, prioritizing new data for matches, but keeping everything else (like fallbacks)
+      setJoelsSongs(prev => {
+        const newSongs = [...tracksWithBuster];
+        prev.forEach(oldTrack => {
+          if (!newSongs.some((t: any) => t.id === oldTrack.id)) {
+            newSongs.push(oldTrack);
+          }
+        });
+        return newSongs;
+      });
+      
+      setSyncPlaylistId(id);
+      localStorage.setItem('joel_sync_playlist_id', id);
+    }
+    
+    setIsSyncing(false);
+    setInitialLoading(false);
   };
 
   const handleAddManualUrl = async () => {
