@@ -313,7 +313,9 @@ export function PlayerControls() {
   const handleSeekForward = useCallback(() => {
     if (!currentTrack || !isReady) return
     const newTime = Math.min(duration, currentTime + 5)
-    if (playbackSource === "youtube" && youtubePlayer) youtubePlayer.seekTo(newTime, true)
+    if (playbackSource === "youtube" && youtubePlayer) {
+      try { youtubePlayer.seekTo(newTime, true) } catch(e){}
+    }
     else if (playbackSource === "suno" && sunoAudioRef.current) sunoAudioRef.current.currentTime = newTime
     setCurrentTime(newTime); setPlaybackPosition(newTime)
   }, [youtubePlayer, isReady, currentTrack, duration, currentTime, playbackSource, setPlaybackPosition])
@@ -321,7 +323,9 @@ export function PlayerControls() {
   const handleSeekBackward = useCallback(() => {
     if (!currentTrack || !isReady) return
     const newTime = Math.max(0, currentTime - 5)
-    if (playbackSource === "youtube" && youtubePlayer) youtubePlayer.seekTo(newTime, true)
+    if (playbackSource === "youtube" && youtubePlayer) {
+      try { youtubePlayer.seekTo(newTime, true) } catch(e){}
+    }
     else if (playbackSource === "suno" && sunoAudioRef.current) sunoAudioRef.current.currentTime = newTime
     setCurrentTime(newTime); setPlaybackPosition(newTime)
   }, [youtubePlayer, isReady, currentTrack, currentTime, playbackSource, setPlaybackPosition])
@@ -330,7 +334,9 @@ export function PlayerControls() {
     if (!isReady) return
     const newTime = value[0]
     isSeekingRef.current = true
-    if (playbackSource === "youtube" && youtubePlayer) youtubePlayer.seekTo(newTime, true)
+    if (playbackSource === "youtube" && youtubePlayer) {
+      try { youtubePlayer.seekTo(newTime, true) } catch(e){}
+    }
     else if (playbackSource === "suno" && sunoAudioRef.current) sunoAudioRef.current.currentTime = newTime
     setCurrentTime(newTime); setPlaybackPosition(newTime)
     setTimeout(() => { isSeekingRef.current = false }, 300)
@@ -341,7 +347,9 @@ export function PlayerControls() {
   const handleVolumeChange = useCallback((value: number[]) => {
     const v = value[0]
     setVolume(v)
-    if (playbackSource === "youtube" && youtubePlayer) youtubePlayer.setVolume(v)
+    if (playbackSource === "youtube" && youtubePlayer) {
+      try { youtubePlayer.setVolume(v) } catch(e){}
+    }
     else if (playbackSource === "suno" && sunoAudioRef.current) sunoAudioRef.current.volume = v / 100
     setIsMuted(v === 0)
   }, [youtubePlayer, setVolume, playbackSource])
@@ -460,7 +468,11 @@ export function PlayerControls() {
     if (playbackSource === "youtube" && sunoAudioRef.current) {
       sunoAudioRef.current.pause();
     } else if (playbackSource === "suno" && youtubePlayer && typeof youtubePlayer.pauseVideo === 'function') {
-      youtubePlayer.pauseVideo();
+      try {
+        youtubePlayer.pauseVideo();
+      } catch (e) {
+        console.warn("YT pauseVideo error during source switch", e);
+      }
     }
   }, [playbackSource, youtubePlayer]);
 
@@ -650,8 +662,13 @@ export function PlayerControls() {
     volume, handleVolumeChange, toggleMute, toggleShuffle, toggleRepeat, playbackSource, isLyricsOpen, isQueueOpen])
 
   const handleSleepTimerEnd = useCallback(() => {
-    if (playbackSource === "youtube" && youtubePlayer) youtubePlayer.pauseVideo()
-    else if (playbackSource === "suno" && sunoAudioRef.current) sunoAudioRef.current.pause()
+    if (playbackSource === "youtube" && youtubePlayer) {
+      try {
+        youtubePlayer.pauseVideo()
+      } catch (e) { console.warn(e) }
+    } else if (playbackSource === "suno" && sunoAudioRef.current) {
+      sunoAudioRef.current.pause()
+    }
     setIsPlaying(false)
   }, [youtubePlayer, playbackSource])
 

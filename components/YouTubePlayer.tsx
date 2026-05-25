@@ -123,6 +123,8 @@ function YouTubeIframePlayer({
 
   useEffect(() => {
     const initPlayer = () => {
+      // Create if needed. We don't strictly need a valid ID to initialize the player, 
+      // but if we don't have one, we can wait or start with a placeholder if needed.
       if (!window.YT?.Player || !containerRef.current || playerRef.current || !isValidYouTubeId(currentTrack?.id) || playbackSource !== "youtube") return
       const playerVars: any = {
         autoplay: 1, controls: 0, disablekb: 1, fs: 0,
@@ -139,13 +141,15 @@ function YouTubeIframePlayer({
           onReady: (event: any) => {
             isPlayerReadyRef.current = true
             event.target.setVolume(100)
-            if (isValidYouTubeId(currentTrack?.id)) {
+            if (isValidYouTubeId(currentTrack?.id) && playbackSource === "youtube") {
               if (isPlayingRef.current) {
                 event.target.loadVideoById(currentTrack.id)
                 setTimeout(() => {
-                  if (event.target.getPlayerState?.() !== 1) {
-                    event.target.playVideo?.()
-                  }
+                  try {
+                    if (event.target.getPlayerState?.() !== 1) {
+                      event.target.playVideo?.()
+                    }
+                  } catch (e) { console.warn(e) }
                 }, 150)
               } else {
                 event.target.cueVideoById(currentTrack.id)
@@ -184,20 +188,42 @@ function YouTubeIframePlayer({
         tag, document.getElementsByTagName("script")[0]
       )
     }
+    
     if (isValidYouTubeId(currentTrack?.id) && playbackSource === "youtube") {
       if (window.YT?.Player) initPlayer()
       else window.onYouTubeIframeAPIReady = initPlayer
     }
 
+  }, [currentTrack?.id, playbackSource, audioSettings.youtubeQuality]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cleanup on unmount or when component is destroyed
+  useEffect(() => {
     return () => {
       clearInterval(durationPollIntervalRef.current!)
       stopProgressTracking()
-      playerRef.current?.destroy?.()
-      playerRef.current = null
+      if (playerRef.current) {
+         try {
+           playerRef.current.destroy?.()
+         } catch(e) {}
+         playerRef.current = null
+      }
       isPlayerReadyRef.current = false
       window.onYouTubeIframeAPIReady = () => {}
     }
-  }, [audioSettings, currentTrack?.id, playbackSource]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // Empty dependency array -> runs only on mount/unmount
+
+  // Handle audioSettings changes by triggering a destroy and allowing the other effect to recreate
+  useEffect(() => {
+    if (playerRef.current) {
+      clearInterval(durationPollIntervalRef.current!)
+      stopProgressTracking()
+      try {
+        playerRef.current.destroy?.()
+      } catch(e) {}
+      playerRef.current = null
+      isPlayerReadyRef.current = false
+    }
+  }, [audioSettings.youtubeQuality])
 
   useEffect(() => {
     if (playerRef.current && isPlayerReadyRef.current && isValidYouTubeId(currentTrack?.id) && playbackSource === "youtube") {
@@ -227,11 +253,15 @@ function YouTubeIframePlayer({
 
   useEffect(() => {
     if (playerRef.current && isPlayerReadyRef.current && playbackSource === "youtube") {
-      const state = playerRef.current.getPlayerState?.();
-      if (isPlaying) {
-        if (state !== 1) playerRef.current.playVideo();
-      } else {
-        if (state !== 2) playerRef.current.pauseVideo();
+      try {
+        const state = playerRef.current.getPlayerState?.();
+        if (isPlaying) {
+          if (state !== 1) playerRef.current.playVideo();
+        } else {
+          if (state !== 2) playerRef.current.pauseVideo();
+        }
+      } catch (err) {
+        console.warn("YouTubePlayer play/pause sync error:", err);
       }
     }
   }, [isPlaying, playbackSource])
